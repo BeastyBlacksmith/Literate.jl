@@ -946,16 +946,6 @@ function create_notebook(flavor::PlutoFlavor, chunks, config)
                             write(io, para, '\n')
                             index += 1
                         end
-                        # write(io, "\"\"\"\n")
-                        # write(io, '\n')
-
-                        # content = String(take!(io))
-                        # uuid = uuid4(content, cellCounter)
-                        # cellCounter += 1
-                        # push!(uuids, uuid)
-                        # push!(folds, fold)
-                        # print(ionb, "# ╔═╡ ", uuid, '\n')
-                        # write(ionb, content, '\n')
                     end
                     
                     ############################################################
@@ -1022,6 +1012,16 @@ function create_notebook(flavor::PlutoFlavor, chunks, config)
                     
 
                     write(io, result, '\n')
+
+                    if admoIndex < length(mdContent)
+                        index = admoIndex + 1
+                        while index <= length(mdContent)
+                            para = string(Markdown.MD(mdContent[index]))
+                            write(io, para, '\n')
+                            index += 1
+                        end
+                    end
+
                     write(io, "\"\"\"\n")
                     write(io, '\n')
 
