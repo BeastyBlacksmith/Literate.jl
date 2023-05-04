@@ -484,35 +484,6 @@ function script(inputfile, outputdir=pwd(); config::Dict=Dict(), kwargs...)
 end
 
 
-# function script(inputfile, outputdir=pwd(); config::Dict=Dict(), kwargs...)
-#     # preprocessing and parsing
-#     chunks, config =
-#         preprocessor(inputfile, outputdir; user_config=config, user_kwargs=kwargs, type=:jl)
-
-#     # create the script file
-#     ioscript = IOBuffer()
-#     for chunk in chunks
-#         if isa(chunk, CodeChunk)
-#             for line in chunk.lines
-#                 write(ioscript, line, '\n')
-#             end
-#             write(ioscript, '\n') # add a newline between each chunk
-#         elseif isa(chunk, MDChunk) && config["keep_comments"]::Bool
-#             for line in chunk.lines
-#                 write(ioscript, rstrip(line.first * "# " * line.second) * '\n')
-#             end
-#             write(ioscript, '\n') # add a newline between each chunk
-#         end
-#     end
-
-#     # custom post-processing from user
-#     content = config["postprocess"](String(take!(ioscript)))
-
-#     # write to file
-#     outputfile = write_result(content, config)
-#     return outputfile
-# end
-
 
 """
     Literate.markdown(inputfile, outputdir=pwd(); config::Dict=Dict(), kwargs...)
