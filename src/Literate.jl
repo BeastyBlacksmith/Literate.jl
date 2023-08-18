@@ -6,7 +6,9 @@ https://fredrikekre.github.io/Literate.jl/ for documentation.
 """
 module Literate
 
-import JSON, REPL, IOCapture, CommonMark
+
+import JSON, REPL, IOCapture, Markdown, CommonMark
+
 
 include("IJulia.jl")
 import .IJulia
@@ -16,6 +18,10 @@ struct DefaultFlavor <: AbstractFlavor end
 struct DocumenterFlavor <: AbstractFlavor end
 struct CommonMarkFlavor <: AbstractFlavor end
 struct FranklinFlavor <: AbstractFlavor end
+struct JupyterFlavor <: AbstractFlavor end
+Base.@kwdef struct PlutoFlavor <: AbstractFlavor 
+    use_cm::Bool = false
+end
 struct CarpentriesFlavor <: AbstractFlavor end
 
 # # Some simple rules:
@@ -308,7 +314,7 @@ function create_configuration(inputfile; user_config, user_kwargs, type=nothing)
     cfg["name"] = filename(inputfile)
     cfg["preprocess"] = identity
     cfg["postprocess"] = identity
-    cfg["flavor"] = type === (:md) ? DocumenterFlavor() : DefaultFlavor()
+    cfg["flavor"] = type === (:md) ? DocumenterFlavor() : type === (:nb) ? JupyterFlavor() : DefaultFlavor()
     cfg["credit"] = true
     cfg["mdstrings"] = false
     cfg["keep_comments"] = false
@@ -396,14 +402,17 @@ Available options:
   `This file was generated with Literate.jl ...` to the bottom of the page. If you find
   Literate.jl useful then feel free to keep this.
 - `keep_comments` (default: `false`): When `true`, keeps markdown lines as comments in the
-  output script. Only applicable for `Literate.script`.
+  output script. Only applicable for [`Literate.script`](@ref)
 - `execute` (default: `true` for notebook, `false` for markdown): Whether to execute and
-  capture the output. Only applicable for `Literate.notebook` and `Literate.markdown`.
+  capture the output. Only applicable for [`Literate.notebook`](@ref) and
+  [`Literate.markdown`](@ref).
 - `codefence` (default: `````"````@example \$(name)" => "````"````` for `DocumenterFlavor()`
   and `````"````julia" => "````"````` otherwise): Pair containing opening and closing
   code fence for wrapping code blocks.
-- `flavor` (default: `Literate.DocumenterFlavor()`) Output flavor for markdown, see
-  [Markdown flavors](@ref). Only applicable for `Literate.markdown`.
+- `flavor` (default: `Literate.DocumenterFlavor()` for `Literate.markdown` and
+  `Literate.JupyterFlavor()` for `Literate.notebook`) Output flavor for markdown and
+  notebook output, see [Markdown flavors](@ref) and [Notebook flavors](@ref).
+  Not used for `Literate.script`.
 - `devurl` (default: `"dev"`): URL for "in-development" docs, see [Documenter docs]
   (https://juliadocs.github.io/Documenter.jl/). Unused if `repo_root_url`/
   `nbviewer_root_url`/`binder_root_url` are set.
@@ -447,7 +456,9 @@ function preprocessor(inputfile, outputdir; user_config, user_kwargs, type)
     # Add some information for passing around Literate methods
     config["literate_inputfile"] = inputfile
     config["literate_outputdir"] = outputdir
-    config["literate_ext"] = ext
+    config["literate_ext"] = type === (:nb) ? (
+        config["flavor"]::AbstractFlavor isa JupyterFlavor ? ".ipynb" : ".jl") :
+        ".$(type)"
     config["literate_outputfile"] = outputfile
 
     # read content
@@ -572,8 +583,6 @@ function rewriteContent!(mdContent)
 end
 
 #_______________________________________________________________________________________
-
-
 
 """
     Literate.markdown(inputfile, outputdir=pwd(); config::AbstractDict=Dict(), kwargs...)
@@ -737,14 +746,17 @@ function notebook(inputfile, outputdir=pwd(); config::AbstractDict=Dict(), kwarg
         preprocessor(inputfile, outputdir; user_config=config, user_kwargs=kwargs, type=:nb)
 
     # create the notebook
-    nb = jupyter_notebook(chunks, config)
+    nb = create_notebook(config["flavor"]::AbstractFlavor, chunks, config)
 
     # write to file
-    outputfile = write_result(nb, config; print=(io, c) -> JSON.print(io, c, 1))
+
+    print = config["flavor"]::AbstractFlavor isa JupyterFlavor ? (io, c) -> JSON.print(io, c, 1) : Base.print
+    outputfile = write_result(nb, config; print = print)
+
     return outputfile
 end
 
-function jupyter_notebook(chunks, config)
+function create_notebook(::JupyterFlavor, chunks, config)
     nb = Dict()
     nb["nbformat"] = JUPYTER_VERSION.major
     nb["nbformat_minor"] = JUPYTER_VERSION.minor
@@ -868,6 +880,410 @@ function execute_notebook(nb; inputfile::String, fake_source::String)
         end
     end
     return nb
+end
+
+
+function containsAdmonition(chunk)
+    for line in chunk.lines
+        if startswith(strip(line.first * line.second), "!!!")
+            return true
+        end
+    end
+    return false
+end
+
+function writeRadioBind(questionName, answers)
+    radios = [String(answer) for answer in answers]
+    return """$(questionName)Check = @bind $(questionName)Answer Radio($(radios));"""
+end
+
+function writeMultiBind(questionName, answers)
+    multi = [String(answer) for answer in answers]
+    return """$(questionName)Check = @bind $(questionName)Answer confirm(MultiCheckBox($(multi), orientation=:column));"""
+end
+
+function writeFreeBind(questionName, tests)
+    return """$(questionName)Check = @bind $(questionName)Answer MultiCheckBox([
+        $(join(["""
+        try
+            string($(test))
+        catch
+            "to be added"
+        end => "$(test)" """ for test in tests], ",\n"))], orientation=:column, default=["Test Passed" for test in $tests]);"""
+end
+
+function writeSingleLogic(questionName, questionDict)
+    logic = 
+    """
+    function $(questionName)Test($(questionName)Answer)
+        return $(questionName)Answer == "$(questionDict["correct"])"
+    end;"""
+    return logic
+end
+
+function writeMultiLogic(questionName, questionDict)
+    logic = 
+    """
+    function $(questionName)Test($(questionName)Answer)
+        if length($(questionName)Answer) != length($(questionDict["correct"]))
+            return false
+        else
+            for item in $(questionName)Answer
+                if !in(item, $(questionDict["correct"]))
+                    return false
+                end
+            end
+        end
+        return true
+    end;"""
+    return logic
+end
+
+function writeFreeLogic(questionName, tests)
+    logic = 
+    """
+    function $(questionName)Test($(questionName)Answer)
+        return $(questionName)Answer == ["Test Passed" for test in $tests]
+    end;"""
+    return logic
+end
+
+function writeControlFlow(questionName, restList)
+    controlFlow = """\$(
+    Markdown.MD(Markdown.Admonition($(questionName)Test($(questionName)Answer) ? "correct" : "danger", "$(questionName)", [$restList, md"\$($(questionName)Check)"]))
+    )"""
+    return controlFlow 
+end
+
+function chunkToMD(chunk)
+    buffer = IOBuffer()
+    for line in chunk.lines
+        write(buffer, line.first * line.second, '\n')
+    end
+    seek(buffer, 0)
+    return Markdown.parse(read(buffer, String))
+end
+
+function formatAnswer(answer)
+    answer = replace(answer, r"^[1-9]\.\s" => "")
+    answer = replace(answer, "<!---correct-->" => "")
+    answer = replace(answer, "<!–-correct–>" => "")
+    answer = rstrip(answer)
+    return string(answer)
+end
+
+function formatTest(test)
+    test = replace(test, r"^[1-9]\.\s" => "")
+    test = rstrip(test)
+    return string(test)
+end
+
+function formatCells(io, ionb, cellCounter, uuids, folds, fold)
+    content = String(take!(io))
+    uuid = uuid4(content, cellCounter)
+    cellCounter += 1
+    
+    push!(uuids, uuid)
+    push!(folds, fold) 
+    print(ionb, "# ╔═╡ ", uuid, '\n')
+    write(ionb, content, '\n')
+
+    return cellCounter
+end
+
+function formatCellsEnd(io, ionb, cellCounter, helperContent, helperUuids, helperFolds, fold)
+    content = String(take!(io))
+    uuid = uuid4(content, cellCounter)
+    cellCounter += 1
+    push!(helperUuids, uuid)
+    push!(helperFolds, fold)
+    push!(helperContent, content)
+
+    return cellCounter
+end
+
+function processNonAdmonitions(item, io)
+    # Handle non-admonition elements
+    return string(Markdown.MD(item))
+end
+
+function processSingleChoice(admonition, io, helperList)
+    # Handle single-choice processing
+    questionName = replace("$(admonition.title)" * "$(replace(string(gensym()), "#" => ""))", r"[^\d\w]+" => "")
+    answers = []
+    questionDict = Dict("correct" => "")
+
+    answerList = filter(x -> isa(x, Markdown.List), admonition.content)
+    answerStr = string(Markdown.MD(answerList[end]))
+
+    for line in split(answerStr, "\n")
+        if startswith(lstrip(line), r"[1-9]\.")
+            answer = lstrip(line)
+            
+            correct = occursin("<!---correct-->", string(answer)) || occursin("<!–-correct–>", string(answer))
+            if correct
+                answer = formatAnswer(answer)
+                questionDict["correct"] = escape_string(answer)
+            end
+            answer = formatAnswer(answer)
+            push!(answers, answer)
+        end 
+    end
+
+    restList = filter(x -> !isa(x, Markdown.List), admonition.content)
+    if length(answerList) > 1
+        push!(restList, answerList[begin:end-1])
+    end
+
+    # Pluto nb helper functions 
+    #####################################################
+
+    radioBind = writeRadioBind(questionName, answers)
+    logicBind = writeSingleLogic(questionName, questionDict)
+    
+    push!(helperList, radioBind)
+    push!(helperList, logicBind)
+    
+    return writeControlFlow(questionName, restList)
+end
+
+function processMultipleChoice(admonition, io, helperList)
+    # Handle multiple-choice processing
+    questionName = replace("$(admonition.title)" * "$(replace(string(gensym()), "#" => ""))", r"[^\d\w]+" => "")
+    answers = []
+    questionDict = Dict("correct" => String[])
+
+    answerList = filter(x -> isa(x, Markdown.List), admonition.content)
+    answerStr = string(Markdown.MD(answerList[end]))
+
+    for line in split(answerStr, "\n")
+        if startswith(lstrip(line), r"[1-9]\.")
+            answer = lstrip(line)
+            
+            correct = occursin("<!---correct-->", string(answer)) || occursin("<!–-correct–>", string(answer))
+            if correct
+                answer = formatAnswer(answer)
+                push!(questionDict["correct"], escape_string(answer))
+            end
+            answer = formatAnswer(answer)
+            push!(answers, answer)
+        end 
+    end
+
+    restList = filter(x -> !isa(x, Markdown.List), admonition.content)
+    if length(answerList) > 1
+        push!(restList, answerList[begin:end-1])
+    end
+
+    # Pluto nb helper functions 
+    ####################################################
+
+    radioBind = writeMultiBind(questionName, answers)
+    logicBind = writeMultiLogic(questionName, questionDict)
+    
+    push!(helperList, radioBind)
+    push!(helperList, logicBind)
+    
+    return writeControlFlow(questionName, restList)
+end
+
+function processFreecode(admonition, io, helperList, helperTestList)
+    # Handle freecode processing
+    questionName = replace("$(admonition.title)" * "$(replace(string(gensym()), "#" => ""))", r"[^\d\w]+" => "")
+    tests = []
+
+    testList = filter(x -> isa(x, Markdown.List), admonition.content)
+    testStr = string(Markdown.MD(testList[end]))
+
+    for line in split(testStr, "\n")
+        if startswith(lstrip(line), r"[1-9]\.")
+            test = formatTest(lstrip(line))
+            push!(tests, test)
+        end
+    end
+
+    restList = filter(x -> !isa(x, Markdown.List), admonition.content)
+    if length(testList) > 1
+        push!(restList, testList[begin:end-1])
+    end
+
+    # Pluto nb helper functions 
+    ####################################################
+
+    radioBind = writeFreeBind(questionName, tests)
+    logicBind = writeFreeLogic(questionName, tests)
+
+    push!(helperTestList, radioBind)
+    push!(helperList, logicBind)
+    
+    return writeControlFlow(questionName, restList)
+end
+
+function processNormalAdmonition(admonition, io, helperList, helperTestList)
+    newContentList = []
+    for element in admonition.content
+        if isa(element, Markdown.Admonition)
+            processedElement = processAdmonition(element, io, helperList, helperTestList)
+            push!(newContentList, Markdown.Paragraph([processedElement]))
+        else
+            push!(newContentList, element)
+        end
+    end
+
+    updatedAdmonition = Markdown.Admonition(admonition.category, admonition.title, newContentList)
+    return string(Markdown.MD(updatedAdmonition))
+end
+
+function processAdmonition(admonition, io, helperList, helperTestList)
+    category = admonition.category
+
+    if category == "sc"
+        return processSingleChoice(admonition, io, helperList)
+    elseif category == "mc"
+        return processMultipleChoice(admonition, io, helperList)
+    elseif category == "freecode"
+        return processFreecode(admonition, io, helperList, helperTestList)
+    else
+        return processNormalAdmonition(admonition, io, helperList, helperTestList)
+    end
+end
+
+function writeContent(mdContent, io, helperList, helperTestList)
+    for item in mdContent
+        if isa(item, Markdown.Admonition)
+            result = processAdmonition(item, io, helperList, helperTestList)
+        else
+            result = processNonAdmonitions(item, io)
+        end
+        write(io, result, '\n')
+    end
+end
+
+
+function create_notebook(flavor::PlutoFlavor, chunks, config)
+    ionb = IOBuffer()
+    # Print header
+    write(ionb, """
+        ### A Pluto.jl notebook ###
+        # v0.16.0
+        # ╔═╡ a0000000-0000-0000-0000-000000000000
+        using $(flavor.use_cm ? "CommonMark, PlutoUI, Test" : "Markdown")
+
+        """)
+
+    # Print cells
+    uuids = Base.UUID[]
+    helperUuids = Base.UUID[]
+    helperFolds = Bool[]
+    helperContent = String[]
+    folds = Bool[]
+    default_fold = Dict{String,Bool}("markdown"=>true, "code"=>false) # toggleable ???
+    cellCounter = 1
+    for chunk in chunks
+        io = IOBuffer()
+
+        # Jupyter style metadata # TODO: factor out, identical to jupyter notebook
+        chunktype = isa(chunk, MDChunk) ? "markdown" : "code"
+        fold = default_fold[chunktype]
+        if !isempty(chunk.lines) && line_is_nbmeta(chunk.lines[1])
+            @show chunk.lines
+            metatype, metadata = parse_nbmeta(chunk.lines[1])
+            metatype !== nothing && metatype != chunktype && error("specifying a different cell type is not supported")
+            popfirst!(chunk.lines)
+            fold = get(metadata, "fold", fold)
+        end
+
+        if isa(chunk, MDChunk)
+            if length(chunk.lines) == 1
+                line = escape_string(chunk.lines[1].second, '"')
+                write(io, "$(flavor.use_cm ? "cm" : "md")\"", line, "\"\n")
+            elseif containsAdmonition(chunk)
+                helperList = []
+                helperTestList = []
+
+                str = chunkToMD(chunk)
+                mdContent = str.content
+
+                write(io, "$(flavor.use_cm ? "cm" : "md")\"\"\"\n")
+                writeContent(mdContent, io, helperList, helperTestList)
+                write(io, "\"\"\"\n")
+                
+                cellCounter = formatCells(io, ionb, cellCounter, uuids, folds, fold)
+
+                # helper functions 
+                for item in helperTestList
+                    write(io, item, '\n')
+                    cellCounter = formatCells(io, ionb, cellCounter, uuids, folds, fold)
+                end
+
+                for item in helperList
+                    write(io, item, '\n')
+                    cellCounter = formatCellsEnd(io, ionb, cellCounter, helperContent, helperUuids, helperFolds, fold)
+                end
+            else
+                # Handle chunks without admonitions
+                write(io, "$(flavor.use_cm ? "cm" : "md")\"\"\"\n")
+                for line in chunk.lines
+                    write(io, line.second, '\n') # Skip indent
+                end
+                write(io, "\"\"\"\n")
+                cellCounter = formatCells(io, ionb, cellCounter, uuids, folds, fold)
+            end
+            
+        else # isa(chunk, CodeChunk)
+            for line in chunk.lines
+                write(io, line, '\n')
+            end
+            seek(io, 0)
+            content = read(io, String)
+
+            # Compute number of expressions in the code block and perhaps wrap in begin/end
+            nexprs, idx = 0, 1
+            ex = nothing
+            while true
+                ex, idx = Meta.parse(content, idx)
+                ex === nothing && break
+                nexprs += 1
+            end
+            if nexprs > 1
+                io = IOBuffer()
+                print(io, "begin\n")
+                foreach(l -> print(io, "  ", l, '\n'), eachline(IOBuffer(content)))
+                print(io, "end\n")
+                cellCounter = formatCells(io, ionb, cellCounter, uuids, folds, fold)
+            else
+                cellCounter = formatCells(io, ionb, cellCounter, uuids, folds, fold)
+            end
+        end
+        
+    end
+
+    # Add Question related functions at the end
+    for (i, uuid) in enumerate(helperUuids)
+        content = helperContent[i]
+        print(ionb, "# ╔═╡ ", uuid, '\n')
+        write(ionb, content, '\n')
+    end
+    
+    uuids = vcat(uuids, helperUuids)
+    folds = vcat(folds, helperFolds)
+
+    # Print cell order
+    print(ionb, "# ╔═╡ Cell order:\n# ╟─a0000000-0000-0000-0000-000000000000\n")
+    foreach(((x, f),) -> print(ionb, "# $(f ? "╟─" : "╠═")", x, '\n'), zip(uuids, folds))
+
+    # custom post-processing from user
+    nb = config["postprocess"](String(take!(ionb)))
+    return nb
+end
+
+# UUID v4 from cell content and cell number (to keep it somewhat stable)
+function uuid4(c, n)
+    c, n = hash(c), hash(n)
+    u = (convert(UInt128, c) << 64) ⊻ convert(UInt128, n)
+    u &= 0xffffffffffff0fff3fffffffffffffff
+    u |= 0x00000000000040008000000000000000
+    return Base.UUID(u)
 end
 
 # Create a sandbox module for evaluation
