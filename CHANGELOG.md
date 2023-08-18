@@ -5,7 +5,85 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+<!-- ## [Unreleased] -->
+
+## [2.14.1] - 2023-08-04
+### Fixed
+- Update generated `EditURL` to use a relative path instead and let Documenter figure out
+  the remote repository. This is required for Documenter version 1, but works also on
+  Documenter 0.27. ([#219][github-219])
+
+## [2.14.0] - 2022-09-22
+### Changed
+- Image filenames resulting from executing markdown files
+  (`Literate.markdown(...; execute=true)`) have changed from a number based on
+  the hash of the source block to the format
+  `{name}-{blocknumber}.(svg|png|...)`. ([#204][github-204],
+  [#205][github-205])
+
+## [2.13.4] - 2022-06-03
+### Fixed
+- Automatic head branch detection (introduced in version 2.11.0) caused a performance
+  regression since the `git remote show` command takes ~1 second. For documentation builds
+  with many literate files this caused significant slowdowns, which is particularly annoying
+  when doing iterative buils with eg.
+  [LiveServer.jl](https://github.com/tlienart/LiveServer.jl). Literate now caches the remote
+  head branch on a per-repo basis, so the 1 second delay should only be noticed on the first
+  run of the first file in a repo. As noted in the changelog entry for 2.11.0 it is also
+  possible to specify the head branch by passing the `edit_commit` keyword argument. Doing
+  so will now completely skip the slow `git` command. ([8054d26][8054d26])
+
+## [2.13.3] - 2022-05-21
+### Fixed
+- Update remote HEAD branch detection to use `addenv` instead of `setenv` such that e.g.
+  ssh-agent variables are available to the git command. Also set
+  `GIT_SSH_COMMAND='ssh -o "BatchMode yes"'` to supress prompts when using ssh.
+  ([#197][github-197])
+
+## [2.13.2] - 2022-04-22
+### Fixed
+- Set current working directory for markdown execution to the output directory, just like
+  notebook execution. ([#195][github-195])
+- Set the apparent source file to the output file for markdown and notebook execution.
+  ([#195][github-195])
+
+## [2.13.1] - 2022-04-12
+### Fixed
+- Disable git terminal prompt when detecting remote HEAD branch. ([#194][github-194])
+
+## [2.13.0] - 2022-02-18
+### Changed
+- "Markdown stdlib-style" inline math (e.g. ``` ``f(x) = x^2`` ```) is now replaced with
+  "notebook style" math (`$f(x) = x^2$`) for notebook output. This is already the case for
+  display math (```` ```math ````). ([#116][github-116], [#190][github-190])
+### Fixed
+- Lines with trailing `#hide` are not shown in output of Markdown execution with Documenter
+  flavor. ([#166][github-166], [#188][github-188])
+
+## [2.12.1] - 2022-02-10
+### Fixed
+- Make sure Markdown execution picks up new definitions of display methods (by running
+  in the latest "world age"). ([#187][github-187])
+
+## [2.12.0] - 2022-02-01
+### Changed
+- User input configurations can now be `AbstractDict`s instead of just `Dict`s.
+  ([#185][github-185], [#186][github-186])
+
+## [2.11.0] - 2022-01-25
+### Added
+- Literate now tries to figure out the branch/commit that `EditURL` should point to
+  automatically instead of always defaulting to `"master"`. For typical setups the
+  auto-detection should be sufficient, but you can also set it explicitly by passing
+  `edit_commit`, for example `edit_commit = "main"`. ([#179][github-179], [#184][github-184])
+
+## [2.10.0] - 2022-01-24
+### Added
+- Markdown execution now also support `image/svg+xml`. ([#182][github-182], [#183][github-183])
+
+## [2.9.4] - 2021-10-18
+### Fixed
+- Fix multiline comment support for `\r\n` line endings. ([#171][github-171], [#172][github-172])
 
 ## [2.9.3] - 2021-09-01
 ### Fixed
@@ -134,7 +212,9 @@ https://discourse.julialang.org/t/ann-literate-jl/10651 for release announcement
 [6d1aec9]: https://github.com/fredrikekre/Literate.jl/commit/6d1aec90b13c6ad888be0fdc77583e9c525b5dc1
 [dc409d0]: https://github.com/fredrikekre/Literate.jl/commit/dc409d0f43a6282bee4e28e8e12bb6309942e5d5
 [ceff7a3]: https://github.com/fredrikekre/Literate.jl/commit/ceff7a36be2a9152d853257bac97be00d915ba8e
+[8054d26]: https://github.com/fredrikekre/Literate.jl/commit/8054d2630b72bc190913b9b92cdb16e367b1ea51
 
+[github-116]: https://github.com/fredrikekre/Literate.jl/issues/116
 [github-144]: https://github.com/fredrikekre/Literate.jl/issues/144
 [github-145]: https://github.com/fredrikekre/Literate.jl/pull/145
 [github-146]: https://github.com/fredrikekre/Literate.jl/pull/146
@@ -146,11 +226,41 @@ https://discourse.julialang.org/t/ann-literate-jl/10651 for release announcement
 [github-162]: https://github.com/fredrikekre/Literate.jl/issues/162
 [github-163]: https://github.com/fredrikekre/Literate.jl/pull/163
 [github-165]: https://github.com/fredrikekre/Literate.jl/issues/165
+[github-166]: https://github.com/fredrikekre/Literate.jl/issues/166
 [github-167]: https://github.com/fredrikekre/Literate.jl/pull/167
 [github-168]: https://github.com/fredrikekre/Literate.jl/issues/168
 [github-169]: https://github.com/fredrikekre/Literate.jl/pull/169
+[github-171]: https://github.com/fredrikekre/Literate.jl/issues/171
+[github-172]: https://github.com/fredrikekre/Literate.jl/pull/172
+[github-179]: https://github.com/fredrikekre/Literate.jl/issues/179
+[github-182]: https://github.com/fredrikekre/Literate.jl/issues/182
+[github-183]: https://github.com/fredrikekre/Literate.jl/pull/183
+[github-184]: https://github.com/fredrikekre/Literate.jl/pull/184
+[github-185]: https://github.com/fredrikekre/Literate.jl/issues/185
+[github-186]: https://github.com/fredrikekre/Literate.jl/pull/186
+[github-187]: https://github.com/fredrikekre/Literate.jl/pull/187
+[github-188]: https://github.com/fredrikekre/Literate.jl/pull/188
+[github-190]: https://github.com/fredrikekre/Literate.jl/pull/190
+[github-194]: https://github.com/fredrikekre/Literate.jl/pull/194
+[github-195]: https://github.com/fredrikekre/Literate.jl/pull/195
+[github-197]: https://github.com/fredrikekre/Literate.jl/issues/197
+[github-204]: https://github.com/fredrikekre/Literate.jl/issues/204
+[github-205]: https://github.com/fredrikekre/Literate.jl/pull/205
+[github-219]: https://github.com/fredrikekre/Literate.jl/pull/219
 
-[Unreleased]: https://github.com/fredrikekre/Literate.jl/compare/v2.9.3...HEAD
+[Unreleased]: https://github.com/fredrikekre/Literate.jl/compare/v2.14.1...HEAD
+[2.14.1]: https://github.com/fredrikekre/Literate.jl/compare/v2.14.0...v2.14.1
+[2.14.0]: https://github.com/fredrikekre/Literate.jl/compare/v2.13.3...v2.14.0
+[2.13.4]: https://github.com/fredrikekre/Literate.jl/compare/v2.13.3...v2.13.4
+[2.13.3]: https://github.com/fredrikekre/Literate.jl/compare/v2.13.2...v2.13.3
+[2.13.2]: https://github.com/fredrikekre/Literate.jl/compare/v2.13.1...v2.13.2
+[2.13.1]: https://github.com/fredrikekre/Literate.jl/compare/v2.13.0...v2.13.1
+[2.13.0]: https://github.com/fredrikekre/Literate.jl/compare/v2.12.1...v2.13.0
+[2.12.1]: https://github.com/fredrikekre/Literate.jl/compare/v2.12.0...v2.12.1
+[2.12.0]: https://github.com/fredrikekre/Literate.jl/compare/v2.11.0...v2.12.0
+[2.11.0]: https://github.com/fredrikekre/Literate.jl/compare/v2.10.0...v2.11.0
+[2.10.0]: https://github.com/fredrikekre/Literate.jl/compare/v2.9.4...v2.10.0
+[2.9.4]: https://github.com/fredrikekre/Literate.jl/compare/v2.9.3...v2.9.4
 [2.9.3]: https://github.com/fredrikekre/Literate.jl/compare/v2.9.2...v2.9.3
 [2.9.2]: https://github.com/fredrikekre/Literate.jl/compare/v2.9.1...v2.9.2
 [2.9.1]: https://github.com/fredrikekre/Literate.jl/compare/v2.9.0...v2.9.1

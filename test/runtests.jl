@@ -221,7 +221,8 @@ content = """
     ## PLACEHOLDER3
     ## PLACEHOLDER4
 
-    # Some math:
+    # Some inline math: ``\\frac{df}{dx}``, some multiline inline math: ``y =
+    # kx + m``, and some display math:
     # ```math
     # \\int f(x) dx
     # ```
@@ -290,6 +291,7 @@ const GITLAB_ENV = Dict(
     (k => nothing for k in keys(TRAVIS_ENV))...,
     (k => nothing for k in keys(ACTIONS_ENV))...,
 )
+
 @testset "Literate.script" begin; Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
     mktempdir(@__DIR__) do sandbox
         cd(sandbox) do
@@ -513,7 +515,7 @@ end end
             end
             expected_markdown = """
             ```@meta
-            EditURL = "https://github.com/fredrikekre/Literate.jl/blob/master/test/$(basename(sandbox))/inputfile.jl"
+            EditURL = "../inputfile.jl"
             ```
 
             # [Example](@id example-id)
@@ -580,7 +582,8 @@ end end
             # PLACEHOLDER4
             ````
 
-            Some math:
+            Some inline math: ``\\frac{df}{dx}``, some multiline inline math: ``y =
+            kx + m``, and some display math:
             ```math
             \\int f(x) dx
             ```
@@ -642,7 +645,7 @@ end end
             @test occursin("Link to repo root: https://github.com/fredrikekre/Literate.jl/blob/master/file.jl", markdown)
             @test occursin("Link to nbviewer: https://nbviewer.jupyter.org/github/fredrikekre/Literate.jl/blob/gh-pages/previews/PR42/file.jl", markdown)
             @test occursin("Link to binder: https://mybinder.org/v2/gh/fredrikekre/Literate.jl/gh-pages?filepath=previews/PR42/file.jl", markdown)
-            @test occursin("EditURL = \"https://github.com/fredrikekre/Literate.jl/blob/master/test/$(basename(sandbox))/inputfile.jl\"", markdown)
+            @test occursin("EditURL = \"../inputfile.jl\"", markdown)
 
             # Travis with no tag -> dev directory
             withenv(TRAVIS_ENV...,
@@ -653,7 +656,7 @@ end end
             @test occursin("Link to repo root: https://github.com/fredrikekre/Literate.jl/blob/master/file.jl", markdown)
             @test occursin("Link to nbviewer: https://nbviewer.jupyter.org/github/fredrikekre/Literate.jl/blob/gh-pages/dev/file.jl", markdown)
             @test occursin("Link to binder: https://mybinder.org/v2/gh/fredrikekre/Literate.jl/gh-pages?filepath=dev/file.jl", markdown)
-            @test occursin("EditURL = \"https://github.com/fredrikekre/Literate.jl/blob/master/test/$(basename(sandbox))/inputfile.jl\"", markdown)
+            @test occursin("EditURL = \"../inputfile.jl\"", markdown)
 
             # GitHub Actions with a tag
             withenv(ACTIONS_ENV...) do
@@ -663,7 +666,7 @@ end end
             @test occursin("Link to repo root: https://github.com/fredrikekre/Literate.jl/blob/master/file.jl", markdown)
             @test occursin("Link to nbviewer: https://nbviewer.jupyter.org/github/fredrikekre/Literate.jl/blob/gh-pages/v1.2.0/file.jl", markdown)
             @test occursin("Link to binder: https://mybinder.org/v2/gh/fredrikekre/Literate.jl/gh-pages?filepath=v1.2.0/file.jl", markdown)
-            @test occursin("EditURL = \"https://github.com/fredrikekre/Literate.jl/blob/master/test/$(basename(sandbox))/inputfile.jl\"", markdown)
+            @test occursin("EditURL = \"../inputfile.jl\"", markdown)
 
             # GitHub Actions with PR preview build
             withenv(ACTIONS_ENV...,
@@ -675,7 +678,7 @@ end end
             @test occursin("Link to repo root: https://github.com/fredrikekre/Literate.jl/blob/master/file.jl", markdown)
             @test occursin("Link to nbviewer: https://nbviewer.jupyter.org/github/fredrikekre/Literate.jl/blob/gh-pages/previews/PR42/file.jl", markdown)
             @test occursin("Link to binder: https://mybinder.org/v2/gh/fredrikekre/Literate.jl/gh-pages?filepath=previews/PR42/file.jl", markdown)
-            @test occursin("EditURL = \"https://github.com/fredrikekre/Literate.jl/blob/master/test/$(basename(sandbox))/inputfile.jl\"", markdown)
+            @test occursin("EditURL = \"../inputfile.jl\"", markdown)
 
             # GitHub Actions without a tag -> dev directory
             withenv(ACTIONS_ENV...,
@@ -686,7 +689,7 @@ end end
             @test occursin("Link to repo root: https://github.com/fredrikekre/Literate.jl/blob/master/file.jl", markdown)
             @test occursin("Link to nbviewer: https://nbviewer.jupyter.org/github/fredrikekre/Literate.jl/blob/gh-pages/dev/file.jl", markdown)
             @test occursin("Link to binder: https://mybinder.org/v2/gh/fredrikekre/Literate.jl/gh-pages?filepath=dev/file.jl", markdown)
-            @test occursin("EditURL = \"https://github.com/fredrikekre/Literate.jl/blob/master/test/$(basename(sandbox))/inputfile.jl\"", markdown)
+            @test occursin("EditURL = \"../inputfile.jl\"", markdown)
 
             # GitLab CI with GitLab Pages
             withenv(GITLAB_ENV...) do
@@ -696,7 +699,7 @@ end end
             @test occursin("Link to repo root: https://gitlab.com/fredrikekre/Literate.jl/blob/master/file.jl", markdown)
             @test occursin("Link to nbviewer: https://nbviewer.jupyter.org/urls/fredrikekre.gitlab.io/Literate.jl/file.jl", markdown)
             @test_broken occursin("Link to binder: https://mybinder.org/v2/gh/fredrikekre/Literate.jl/gh-pages?filepath=dev/file.jl", markdown)
-            @test occursin("EditURL = \"https://gitlab.com/fredrikekre/Literate.jl/blob/master/test/$(basename(sandbox))/inputfile.jl\"", markdown)
+            @test occursin("EditURL = \"../inputfile.jl\"", markdown)
 
             # building under DocumentationGenerator.jl
             withenv("DOCUMENTATIONGENERATOR" => "true",
@@ -762,6 +765,14 @@ end end
             markdown = read(joinpath(outdir, "inputfile.md"), String)
             @test !occursin("md\"\"\"", markdown)
 
+            # edit_commit
+            withenv(ACTIONS_ENV...) do
+                Literate.markdown(inputfile, outdir; edit_commit="retsam")
+            end
+            markdown = read(joinpath(outdir, "inputfile.md"), String)
+            @test occursin("blob/retsam/", markdown)
+            @test !occursin("blob/master/", markdown)
+
             # execute
             write(inputfile, """
                 using DisplayAs
@@ -778,6 +789,10 @@ end end
                 Base.show(io::IO, mime::MIME"image/jpeg", ::JPEG) = print(io, "JPEG")
                 JPEG()
                 #-
+                struct SVG end
+                Base.show(io::IO, mime::MIME"image/svg+xml", ::SVG) = print(io, "SVG")
+                SVG()
+                #-
                 struct MD end
                 Base.show(io::IO, mime::MIME"text/markdown", ::MD) = print(io, "# " * "MD")
                 Base.show(io::IO, mime::MIME"text/html", ::MD) =
@@ -786,6 +801,13 @@ end end
                 DisplayAs.MD(MD())
                 #-
                 DisplayAs.HTML(MD())
+                #-
+                struct Plain end
+                Base.showable(::MIME, ::Plain) = false
+                Base.showable(::MIME"text/plain", ::Plain) = true
+                Base.show(::IO, ::MIME, ::Plain) = error("only plain output supported")
+                Base.show(io::IO, ::MIME"text/plain", ::Plain) = print(io, "Plain")
+                Plain()
                 #-
                 print("hello"); print(stdout, ", "); print(stderr, "world")
                 #-
@@ -798,20 +820,40 @@ end end
                 #-
                 print("hello there")
                 nothing
+                #-
+                a = 2 + 2
+                print("a: ", a); nothing #hide
+                #-
+                47 #hide
+                #-
+                (@__DIR__) == pwd() ? "cwd correct" : "cwd incorrect"
+                #-
+                basename(@__FILE__)
                 """)
             Literate.markdown(inputfile, outdir; execute=true)
             markdown = read(joinpath(outdir, "inputfile.md"), String)
             @test occursin("```\n2\n```", markdown) # text/plain
             @test occursin("```\n2×2 $(Matrix{Int}):\n 1  2\n 3  4\n```", markdown) # text/plain
-            @test occursin(r"!\[\]\(\d+\.png\)", markdown) # image/png
-            @test occursin(r"!\[\]\(\d+\.jpeg\)", markdown) # image/jpeg
+            @test occursin(r"!\[\]\(inputfile-5\.png\)", markdown) # image/png
+            @test occursin(r"!\[\]\(inputfile-6\.jpeg\)", markdown) # image/jpeg
+            @test occursin(r"!\[\]\(inputfile-7\.svg\)", markdown) # image/svg+xml, fredrikekre/Literate.jl#182
             @test occursin("# MD", markdown) # text/markdown
             @test occursin("```@raw html\n<h1>MD</h1>\n```", markdown) # text/html
+            @test occursin("```\nPlain\n```", markdown) # text/plain, fredrikekre/Literate#187
             @test occursin("```\nhello, world\n```", markdown) # stdout/stderr
             @test occursin("```\n42\n```", markdown) # result over stdout/stderr
+            @test occursin("```julia\n123+123;\n```", markdown) # no additional `nothing #hide`, fredrikekre/Literate.jl/issues/166#issuecomment-979987878
             @test !occursin("246", markdown) # empty output because trailing ;
             @test !occursin("```\nnothing\n```", markdown) # empty output because nothing as return value
             @test occursin("```\nhello there\n```", markdown) # nothing as return value, non-empty stdout
+            @test occursin("```julia\na = 2 + 2\n```", markdown) # line with `#hide` removed
+            @test occursin("```\na: 4\n```", markdown) # nothing as return value, non-empty stdout
+            @test !occursin("```julia\n47 #hide\n```", markdown) # line with `#hide` removed
+            @test !occursin("```julia\n```", markdown) # no empty code block
+            @test occursin("```\n47\n```", markdown) # return value (even though line/block removed)
+            @test occursin("```\n\"cwd correct\"\n```", markdown) # Correct cwd (@__DIR__)
+            @test occursin("```\n\"inputfile.md\"\n```", markdown) # Correct source file (@__FILE__)
+
             # FranklinFlavor
             Literate.markdown(inputfile, outdir; execute=true, flavor=Literate.FranklinFlavor())
             markdown = read(joinpath(outdir, "inputfile.md"), String)
@@ -827,10 +869,10 @@ end end
             @test isfile("inputfile.md")
 
             # fredrikekre/Literate.jl#165: \r\n line endings with multiline comments/mdstrings
-            write(inputfile, "#=\r\nhello world\r\nhej världen\r\n=#")
+            write(inputfile, "#=\r\nhello world\r\nhej världen\r\n=#\r\n")
             chunks, _ = Literate.preprocessor(inputfile, outdir; user_kwargs=(), user_config=(), type=:md)
             @test chunks[2].lines == ["" => "hello world", "" => "hej världen"]
-            write(inputfile, "md\"\"\"\r\nhello world\r\nhej världen\r\n\"\"\"")
+            write(inputfile, "md\"\"\"\r\nhello world\r\nhej världen\r\n\"\"\"\r\n")
             chunks, _ = Literate.preprocessor(inputfile, outdir; user_kwargs=pairs((; mdstrings=true)),
                                               user_config=(), type=:md)
             @test chunks[2].lines == ["" => "hello world", "" => "hej världen"]
@@ -961,7 +1003,8 @@ end end
 
             """
                "source": [
-                "Some math:\\n",
+                "Some inline math: \$\\\\frac{df}{dx}\$, some multiline inline math: \$y =\\n",
+                "kx + m\$, and some display math:\\n",
                 "\$\$\\n",
                 "\\\\int f(x) dx\\n",
                 "\$\$"
@@ -1143,7 +1186,7 @@ end end
                     err
                 end)
             @test isa(r, ErrorException)
-            @test occursin("when executing the following code block in file ", r.msg)
+            @test occursin("when executing the following code block from inputfile ", r.msg)
             @test occursin(inputfile, r.msg)
 
             # verify that inputfile exists
