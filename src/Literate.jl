@@ -1231,7 +1231,7 @@ function create_notebook(flavor::PlutoFlavor, chunks, config)
             nexprs, idx = 0, 1
             ex = nothing
             while true
-                ex, idx = Meta.parse(content, idx)
+                ex, idx = Meta.parse(content, idx, raise=false)
                 ex === nothing && break
                 nexprs += 1
             end
