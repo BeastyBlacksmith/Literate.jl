@@ -6,7 +6,7 @@ https://fredrikekre.github.io/Literate.jl/ for documentation.
 """
 module Literate
 
-import JSON, REPL, IOCapture, CommonMark
+import JSON, REPL, IOCapture
 
 include("IJulia.jl")
 import .IJulia
@@ -16,7 +16,6 @@ struct DefaultFlavor <: AbstractFlavor end
 struct DocumenterFlavor <: AbstractFlavor end
 struct CommonMarkFlavor <: AbstractFlavor end
 struct FranklinFlavor <: AbstractFlavor end
-struct CarpentriesFlavor <: AbstractFlavor end
 
 # # Some simple rules:
 #
@@ -46,7 +45,7 @@ CodeChunk() = CodeChunk(String[], false)
 
 ismdline(line) = (occursin(r"^\h*#$", line) || occursin(r"^\h*# .*$", line)) && !occursin(r"^\h*##", line)
 
-function parse(content; allow_continued=true)
+function parse(content; allow_continued = true)
     lines = collect(eachline(IOBuffer(content)))
 
     chunks = Chunk[]
@@ -124,10 +123,10 @@ function parse(content; allow_continued=true)
 end
 
 function replace_default(content, sym;
-    config::Dict,
-    branch="gh-pages",
-    commit="master"
-)
+                         config::Dict,
+                         branch = "gh-pages",
+                         commit = "master"
+                         )
     repls = Pair{Any,Any}[]
 
     # add some shameless advertisement
@@ -227,7 +226,7 @@ filename(str) = first(splitext(last(splitdir(str))))
 isdocumenter(cfg) = cfg["flavor"]::AbstractFlavor isa DocumenterFlavor
 
 _DEFAULT_IMAGE_FORMATS = [(MIME("image/svg+xml"), ".svg"), (MIME("image/png"), ".png"),
-    (MIME("image/jpeg"), ".jpeg")]
+                          (MIME("image/jpeg"), ".jpeg")]
 
 # Cache of inputfile => head branch
 const HEAD_BRANCH_CACHE = Dict{String,String}()
@@ -245,7 +244,7 @@ function edit_commit(inputfile, user_config)
             readchomp(
                 pipeline(
                     setenv(`$(git) rev-parse --show-toplevel`; dir=dirname(inputfile));
-                    stderr=devnull
+                    stderr=devnull,
                 )
             )
         catch
@@ -291,15 +290,15 @@ function create_configuration(inputfile; user_config, user_kwargs, type=nothing)
     if (d = get(user_config, "documenter", nothing); d !== nothing)
         if type === :md
             Base.depwarn("The documenter=$(d) keyword to Literate.markdown is deprecated." *
-                         " Pass `flavor = Literate.$(d ? "DocumenterFlavor" : "CommonMarkFlavor")()`" *
-                         " instead.", Symbol("Literate.markdown"))
+                " Pass `flavor = Literate.$(d ? "DocumenterFlavor" : "CommonMarkFlavor")()`" *
+                " instead.", Symbol("Literate.markdown"))
             user_config["flavor"] = d ? DocumenterFlavor() : CommonMarkFlavor()
         elseif type === :nb
             Base.depwarn("The documenter=$(d) keyword to Literate.notebook is deprecated." *
-                         " It is not used anymore for notebook output.", Symbol("Literate.notebook"))
+                " It is not used anymore for notebook output.", Symbol("Literate.notebook"))
         elseif type === :jl
             Base.depwarn("The documenter=$(d) keyword to Literate.script is deprecated." *
-                         " It is not used anymore for script output.", Symbol("Literate.script"))
+                " It is not used anymore for script output.", Symbol("Literate.script"))
         end
     end
 
@@ -419,7 +418,7 @@ Available options:
   `$(_DEFAULT_IMAGE_FORMATS)`. Results which are `showable` with a MIME type are saved with
   the first match, with the corresponding extension.
 """
-const DEFAULT_CONFIGURATION = nothing # Dummy const for documentation
+const DEFAULT_CONFIGURATION=nothing # Dummy const for documentation
 
 function preprocessor(inputfile, outputdir; user_config, user_kwargs, type)
     # Create configuration by merging default and userdefined
@@ -473,7 +472,7 @@ function preprocessor(inputfile, outputdir; user_config, user_kwargs, type)
     content = replace_default(content, type; config=config)
 
     # parse the content into chunks
-    chunks = parse(content; allow_continued=type !== :nb)
+    chunks = parse(content; allow_continued = type !== :nb)
 
     return chunks, config
 end
@@ -525,56 +524,6 @@ function script(inputfile, outputdir=pwd(); config::AbstractDict=Dict(), kwargs.
 end
 
 
-#_______________________________________________________________________________________
-# Define general functions needed for admonitions formating.
-
-function containsAdmonition(chunk)
-    for line in chunk.lines
-        if startswith(strip(line.first * line.second), "!!!")
-            return true
-        end
-    end
-    return false
-end
-
-function chunkToMD(chunk)
-    parser = CommonMark.Parser()
-    CommonMark.enable!(parser, CommonMark.AdmonitionRule())
-    buffer = IOBuffer()
-    for line in chunk.lines
-        write(buffer, line.first * line.second, '\n')
-    end
-    str = String(take!(buffer))
-    return parser(str)
-end
-
-function rewriteContent!(mdContent)
-    for (node, entering) in mdContent
-        if isa(node.t, CommonMark.Admonition)
-            admonition = node.t
-            node.t = CommonMark.Paragraph()
-            if admonition.category == "yaml"
-                node.first_child.t = CommonMark.Text()
-                node.first_child.nxt.t = CommonMark.Paragraph()
-                CommonMark.insert_after(node.first_child.nxt.last_child, CommonMark.text("\n---\n"))
-                CommonMark.insert_before(node.first_child.nxt, CommonMark.text("---\n"))
-            else
-                CommonMark.insert_before(node, CommonMark.text(""":::::: $(admonition.category)
-
-                ## $(admonition.title)
-
-                """))
-                CommonMark.insert_after(node, CommonMark.text("::::::\n\n"))
-            end
-        end
-    end
-    mdContent
-end
-
-#_______________________________________________________________________________________
-
-
-
 """
     Literate.markdown(inputfile, outputdir=pwd(); config::AbstractDict=Dict(), kwargs...)
 
@@ -588,37 +537,12 @@ function markdown(inputfile, outputdir=pwd(); config::AbstractDict=Dict(), kwarg
     # preprocessing and parsing
     chunks, config =
         preprocessor(inputfile, outputdir; user_config=config, user_kwargs=kwargs, type=:md)
+
     # create the markdown file
-    iomd = IOBuffer()
-
-
-    write_md_chunks!(iomd, chunks, outputdir, config)
-
-
-    # custom post-processing from user
-    content = config["postprocess"](String(take!(iomd)))
-
-    # write to file
-    outputfile = write_result(content, config)
-    return outputfile
-
-end
-
-function write_md_chunks!(iomd, chunks, outputdir, config)
-    flavor = config["flavor"]
     sb = sandbox()
+    iomd = IOBuffer()
     for (chunknum, chunk) in enumerate(chunks)
         if isa(chunk, MDChunk)
-
-            if flavor isa CarpentriesFlavor
-                if containsAdmonition(chunk)
-                    md_chunk = chunkToMD(chunk)
-                    rewriteContent!(md_chunk)
-                    CommonMark.markdown(iomd, md_chunk)
-                    continue
-                end
-            end
-
             for line in chunk.lines
                 write(iomd, line.second, '\n') # skip indent here
             end
@@ -647,30 +571,34 @@ function write_md_chunks!(iomd, chunks, outputdir, config)
             if execute
                 cd(config["literate_outputdir"]) do
                     execute_markdown!(iomd, sb, join(chunk.lines, '\n'), outputdir;
-                        inputfile=config["literate_inputfile"],
-                        fake_source=config["literate_outputfile"],
-                        flavor=config["flavor"],
-                        image_formats=config["image_formats"],
-                        file_prefix="$(config["name"])-$(chunknum)"
+                                      inputfile=config["literate_inputfile"],
+                                      fake_source=config["literate_outputfile"],
+                                      flavor=config["flavor"],
+                                      image_formats=config["image_formats"],
+                                      file_prefix="$(config["name"])-$(chunknum)",
                     )
                 end
             end
         end
         write(iomd, '\n') # add a newline between each chunk
     end
+
+    # custom post-processing from user
+    content = config["postprocess"](String(take!(iomd)))
+
+    # write to file
+    outputfile = write_result(content, config)
+    return outputfile
 end
 
-
-
 function execute_markdown!(io::IO, sb::Module, block::String, outputdir;
-    inputfile::String, fake_source::String,
-    flavor::AbstractFlavor, image_formats::Vector, file_prefix::String)
+                           inputfile::String, fake_source::String,
+                           flavor::AbstractFlavor, image_formats::Vector, file_prefix::String)
     # TODO: Deal with explicit display(...) calls
     r, str, _ = execute_block(sb, block; inputfile=inputfile, fake_source=fake_source)
     # issue #101: consecutive codefenced blocks need newline
     # issue #144: quadruple backticks allow for triple backticks in the output
-    plain_fence = "\n````$(flavor == CarpentriesFlavor() ? "output" : "")\n" => "\n````"
-    # Here CarpentiresFlavor fork...
+    plain_fence = "\n````\n" =>  "\n````"
     if r !== nothing && !REPL.ends_with_semicolon(block)
         if (flavor isa FranklinFlavor || flavor isa DocumenterFlavor) &&
            Base.invokelatest(showable, MIME("text/html"), r)
@@ -716,8 +644,8 @@ function parse_nbmeta(line)
     # Cf. https://jupytext.readthedocs.io/en/latest/formats.html#the-percent-format
     m = match(r"^%% ([^[{]+)?\s*(?:\[(\w+)\])?\s*(\{.*)?$", line)
     typ = m.captures[2]
-    name = m.captures[1] === nothing ? Dict{String,String}() : Dict("name" => m.captures[1])
-    meta = m.captures[3] === nothing ? Dict{String,Any}() : JSON.parse(m.captures[3])
+    name = m.captures[1] === nothing ? Dict{String, String}() : Dict("name" => m.captures[1])
+    meta = m.captures[3] === nothing ? Dict{String, Any}() : JSON.parse(m.captures[3])
     return typ, merge(name, meta)
 end
 line_is_nbmeta(line::Pair) = line_is_nbmeta(line.second)
@@ -740,7 +668,7 @@ function notebook(inputfile, outputdir=pwd(); config::AbstractDict=Dict(), kwarg
     nb = jupyter_notebook(chunks, config)
 
     # write to file
-    outputfile = write_result(nb, config; print=(io, c) -> JSON.print(io, c, 1))
+    outputfile = write_result(nb, config; print = (io, c)->JSON.print(io, c, 1))
     return outputfile
 end
 
@@ -759,11 +687,11 @@ function jupyter_notebook(chunks, config)
             metatype !== nothing && metatype != chunktype && error("specifying a different cell type is not supported")
             popfirst!(chunk.lines)
         else
-            metadata = Dict{String,Any}()
+            metadata = Dict{String, Any}()
         end
         lines = isa(chunk, MDChunk) ?
-                String[x.second for x in chunk.lines] : # skip indent
-                chunk.lines
+                    String[x.second for x in chunk.lines] : # skip indent
+                    chunk.lines
         @views map!(x -> x * '\n', lines[1:end-1], lines[1:end-1])
         cell["cell_type"] = chunktype
         cell["metadata"] = metadata
@@ -780,15 +708,15 @@ function jupyter_notebook(chunks, config)
     metadata = Dict()
 
     kernelspec = Dict()
-    kernelspec["language"] = "julia"
-    kernelspec["name"] = "julia-$(VERSION.major).$(VERSION.minor)"
+    kernelspec["language"] =  "julia"
+    kernelspec["name"] =  "julia-$(VERSION.major).$(VERSION.minor)"
     kernelspec["display_name"] = "Julia $(string(VERSION))"
     metadata["kernelspec"] = kernelspec
 
     language_info = Dict()
     language_info["file_extension"] = ".jl"
     language_info["mimetype"] = "application/julia"
-    language_info["name"] = "julia"
+    language_info["name"]=  "julia"
     language_info["version"] = string(VERSION)
     metadata["language_info"] = language_info
 
@@ -802,7 +730,7 @@ function jupyter_notebook(chunks, config)
         try
             cd(config["literate_outputdir"]) do
                 nb = execute_notebook(nb; inputfile=config["literate_inputfile"],
-                    fake_source=config["literate_outputfile"])
+                                          fake_source=config["literate_outputfile"])
             end
         catch err
             @error "error when executing notebook based on input file: " *
@@ -828,7 +756,7 @@ function execute_notebook(nb; inputfile::String, fake_source::String)
             stream = Dict{String,Any}()
             stream["output_type"] = "stream"
             stream["name"] = "stdout"
-            stream["text"] = collect(Any, eachline(IOBuffer(String(str)), keep=true))
+            stream["text"] = collect(Any, eachline(IOBuffer(String(str)), keep = true))
             push!(cell["outputs"], stream)
         end
 
@@ -838,7 +766,7 @@ function execute_notebook(nb; inputfile::String, fake_source::String)
         function split_mime(dict)
             for mime in ("image/svg+xml", "text/html")
                 if haskey(dict, mime)
-                    dict[mime] = collect(Any, eachline(IOBuffer(dict[mime]), keep=true))
+                    dict[mime] = collect(Any, eachline(IOBuffer(dict[mime]), keep = true))
                 end
             end
             return dict
@@ -918,7 +846,7 @@ function execute_block(sb::Module, block::String; inputfile::String, fake_source
     #  - c.output: combined stdout and stderr
     # `rethrow = Union{}` means that we try-catch all the exceptions thrown in the do-block
     # and return them via the return value (they get handled below).
-    c = IOCapture.capture(rethrow=Union{}) do
+    c = IOCapture.capture(rethrow = Union{}) do
         include_string(sb, block, fake_source)
     end
     popdisplay(disp) # IOCapture.capture has a try-catch so should always end up here
