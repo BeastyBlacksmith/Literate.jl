@@ -19,7 +19,7 @@ struct DocumenterFlavor <: AbstractFlavor end
 struct CommonMarkFlavor <: AbstractFlavor end
 struct FranklinFlavor <: AbstractFlavor end
 struct JupyterFlavor <: AbstractFlavor end
-Base.@kwdef struct PlutoFlavor <: AbstractFlavor 
+Base.@kwdef struct PlutoFlavor <: AbstractFlavor
     use_cm::Bool = false
 end
 struct CarpentriesFlavor <: AbstractFlavor end
@@ -442,7 +442,9 @@ function preprocessor(inputfile, outputdir; user_config, user_kwargs, type)
     mkpath(outputdir)
     outputdir = realpath(abspath(outputdir))
     isdir(outputdir) || error("not a directory: $(outputdir)")
-    ext = type === (:nb) ? ".ipynb" : ".$(type)"
+    ext = type === (:nb) ? (
+        config["flavor"]::AbstractFlavor isa JupyterFlavor ? ".ipynb" : ".jl") :
+        ".$(type)"
     outputfile = joinpath(outputdir, config["name"]::String * ext)
     if inputfile == outputfile
         throw(ArgumentError("outputfile (`$outputfile`) is identical to inputfile (`$inputfile`)"))
@@ -456,9 +458,7 @@ function preprocessor(inputfile, outputdir; user_config, user_kwargs, type)
     # Add some information for passing around Literate methods
     config["literate_inputfile"] = inputfile
     config["literate_outputdir"] = outputdir
-    config["literate_ext"] = type === (:nb) ? (
-        config["flavor"]::AbstractFlavor isa JupyterFlavor ? ".ipynb" : ".jl") :
-        ".$(type)"
+    config["literate_ext"] = ext
     config["literate_outputfile"] = outputfile
 
     # read content
@@ -882,16 +882,6 @@ function execute_notebook(nb; inputfile::String, fake_source::String)
     return nb
 end
 
-
-function containsAdmonition(chunk)
-    for line in chunk.lines
-        if startswith(strip(line.first * line.second), "!!!")
-            return true
-        end
-    end
-    return false
-end
-
 function writeRadioBind(questionName, answers)
     radios = [String(answer) for answer in answers]
     return """$(questionName)Check = @bind $(questionName)Answer Radio($(radios));"""
@@ -913,7 +903,7 @@ function writeFreeBind(questionName, tests)
 end
 
 function writeSingleLogic(questionName, questionDict)
-    logic = 
+    logic =
     """
     function $(questionName)Test($(questionName)Answer)
         return $(questionName)Answer == "$(questionDict["correct"])"
@@ -922,7 +912,7 @@ function writeSingleLogic(questionName, questionDict)
 end
 
 function writeMultiLogic(questionName, questionDict)
-    logic = 
+    logic =
     """
     function $(questionName)Test($(questionName)Answer)
         if length($(questionName)Answer) != length($(questionDict["correct"]))
@@ -940,7 +930,7 @@ function writeMultiLogic(questionName, questionDict)
 end
 
 function writeFreeLogic(questionName, tests)
-    logic = 
+    logic =
     """
     function $(questionName)Test($(questionName)Answer)
         return $(questionName)Answer == ["Test Passed" for test in $tests]
@@ -952,10 +942,10 @@ function writeControlFlow(questionName, restList)
     controlFlow = """\$(
     Markdown.MD(Markdown.Admonition($(questionName)Test($(questionName)Answer) ? "correct" : "danger", "$(questionName)", [$restList, md"\$($(questionName)Check)"]))
     )"""
-    return controlFlow 
+    return controlFlow
 end
 
-function chunkToMD(chunk)
+function chunkToMD2(chunk) #FIXME: unify these
     buffer = IOBuffer()
     for line in chunk.lines
         write(buffer, line.first * line.second, '\n')
@@ -982,9 +972,9 @@ function formatCells(io, ionb, cellCounter, uuids, folds, fold)
     content = String(take!(io))
     uuid = uuid4(content, cellCounter)
     cellCounter += 1
-    
+
     push!(uuids, uuid)
-    push!(folds, fold) 
+    push!(folds, fold)
     print(ionb, "# ╔═╡ ", uuid, '\n')
     write(ionb, content, '\n')
 
@@ -1019,7 +1009,7 @@ function processSingleChoice(admonition, io, helperList)
     for line in split(answerStr, "\n")
         if startswith(lstrip(line), r"[1-9]\.")
             answer = lstrip(line)
-            
+
             correct = occursin("<!---correct-->", string(answer)) || occursin("<!–-correct–>", string(answer))
             if correct
                 answer = formatAnswer(answer)
@@ -1027,7 +1017,7 @@ function processSingleChoice(admonition, io, helperList)
             end
             answer = formatAnswer(answer)
             push!(answers, answer)
-        end 
+        end
     end
 
     restList = filter(x -> !isa(x, Markdown.List), admonition.content)
@@ -1035,15 +1025,15 @@ function processSingleChoice(admonition, io, helperList)
         push!(restList, answerList[begin:end-1])
     end
 
-    # Pluto nb helper functions 
+    # Pluto nb helper functions
     #####################################################
 
     radioBind = writeRadioBind(questionName, answers)
     logicBind = writeSingleLogic(questionName, questionDict)
-    
+
     push!(helperList, radioBind)
     push!(helperList, logicBind)
-    
+
     return writeControlFlow(questionName, restList)
 end
 
@@ -1059,7 +1049,7 @@ function processMultipleChoice(admonition, io, helperList)
     for line in split(answerStr, "\n")
         if startswith(lstrip(line), r"[1-9]\.")
             answer = lstrip(line)
-            
+
             correct = occursin("<!---correct-->", string(answer)) || occursin("<!–-correct–>", string(answer))
             if correct
                 answer = formatAnswer(answer)
@@ -1067,7 +1057,7 @@ function processMultipleChoice(admonition, io, helperList)
             end
             answer = formatAnswer(answer)
             push!(answers, answer)
-        end 
+        end
     end
 
     restList = filter(x -> !isa(x, Markdown.List), admonition.content)
@@ -1075,15 +1065,15 @@ function processMultipleChoice(admonition, io, helperList)
         push!(restList, answerList[begin:end-1])
     end
 
-    # Pluto nb helper functions 
+    # Pluto nb helper functions
     ####################################################
 
     radioBind = writeMultiBind(questionName, answers)
     logicBind = writeMultiLogic(questionName, questionDict)
-    
+
     push!(helperList, radioBind)
     push!(helperList, logicBind)
-    
+
     return writeControlFlow(questionName, restList)
 end
 
@@ -1107,7 +1097,7 @@ function processFreecode(admonition, io, helperList, helperTestList)
         push!(restList, testList[begin:end-1])
     end
 
-    # Pluto nb helper functions 
+    # Pluto nb helper functions
     ####################################################
 
     radioBind = writeFreeBind(questionName, tests)
@@ -1115,7 +1105,7 @@ function processFreecode(admonition, io, helperList, helperTestList)
 
     push!(helperTestList, radioBind)
     push!(helperList, logicBind)
-    
+
     return writeControlFlow(questionName, restList)
 end
 
@@ -1201,16 +1191,16 @@ function create_notebook(flavor::PlutoFlavor, chunks, config)
                 helperList = []
                 helperTestList = []
 
-                str = chunkToMD(chunk)
+                str = chunkToMD2(chunk)
                 mdContent = str.content
 
                 write(io, "$(flavor.use_cm ? "cm" : "md")\"\"\"\n")
                 writeContent(mdContent, io, helperList, helperTestList)
                 write(io, "\"\"\"\n")
-                
+
                 cellCounter = formatCells(io, ionb, cellCounter, uuids, folds, fold)
 
-                # helper functions 
+                # helper functions
                 for item in helperTestList
                     write(io, item, '\n')
                     cellCounter = formatCells(io, ionb, cellCounter, uuids, folds, fold)
@@ -1229,7 +1219,7 @@ function create_notebook(flavor::PlutoFlavor, chunks, config)
                 write(io, "\"\"\"\n")
                 cellCounter = formatCells(io, ionb, cellCounter, uuids, folds, fold)
             end
-            
+
         else # isa(chunk, CodeChunk)
             for line in chunk.lines
                 write(io, line, '\n')
@@ -1255,7 +1245,7 @@ function create_notebook(flavor::PlutoFlavor, chunks, config)
                 cellCounter = formatCells(io, ionb, cellCounter, uuids, folds, fold)
             end
         end
-        
+
     end
 
     # Add Question related functions at the end
@@ -1264,7 +1254,7 @@ function create_notebook(flavor::PlutoFlavor, chunks, config)
         print(ionb, "# ╔═╡ ", uuid, '\n')
         write(ionb, content, '\n')
     end
-    
+
     uuids = vcat(uuids, helperUuids)
     folds = vcat(folds, helperFolds)
 
