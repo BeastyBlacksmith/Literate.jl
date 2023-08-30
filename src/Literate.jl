@@ -678,7 +678,7 @@ function execute_markdown!(io::IO, sb::Module, block::String, outputdir;
     r, str, _ = execute_block(sb, block; inputfile=inputfile, fake_source=fake_source)
     # issue #101: consecutive codefenced blocks need newline
     # issue #144: quadruple backticks allow for triple backticks in the output
-    plain_fence = "\n````$(flavor == CarpentriesFlavor() ? "output" : "")\n" => "\n````"
+    plain_fence = "\n````\n" => "\n````"
     # Here CarpentiresFlavor fork...
     if r !== nothing && !REPL.ends_with_semicolon(block)
         if (flavor isa FranklinFlavor || flavor isa DocumenterFlavor) &&
@@ -706,9 +706,29 @@ function execute_markdown!(io::IO, sb::Module, block::String, outputdir;
             return
         end
         # fallback to text/plain
-        write(io, plain_fence.first)
-        Base.invokelatest(show, io, "text/plain", r)
-        write(io, plain_fence.second, '\n')
+        try
+            buf = IOBuffer()
+            if flavor isa CarpentriesFlavor
+                write(buf, chomp(plain_fence.first)*"output\n")
+            else
+                write(buf, plain_fence.first)
+            end
+            Base.invokelatest(show, buf, "text/plain", r)
+            write(buf, plain_fence.second, '\n')
+            write(io, take!(buf))
+        catch exc
+            if exc isa InterruptException
+                rethrow(exc)
+            else
+                if flavor isa CarpentriesFlavor
+                    write(io, chomp(plain_fence.first)*"error\n")
+                else
+                    write(io, plain_fence.first)
+                end
+                Base.invokelatest(showerror, io, exc)
+                write(io, plain_fence.second, '\n')
+            end
+        end
         return
     elseif !isempty(str)
         write(io, plain_fence.first, str, plain_fence.second, '\n')
@@ -1324,7 +1344,7 @@ function execute_block(sb::Module, block::String; inputfile::String, fake_source
     #  - c.output: combined stdout and stderr
     # `rethrow = Union{}` means that we try-catch all the exceptions thrown in the do-block
     # and return them via the return value (they get handled below).
-    c = IOCapture.capture(rethrow=Union{}) do
+    c = IOCapture.capture(rethrow=InterruptException) do
         include_string(sb, block, fake_source)
     end
     popdisplay(disp) # IOCapture.capture has a try-catch so should always end up here
