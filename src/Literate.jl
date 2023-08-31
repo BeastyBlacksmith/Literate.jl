@@ -699,7 +699,7 @@ function execute_markdown!(io::IO, sb::Module, block::String, outputdir;
                 return
             end
         end
-        if Base.invokelatest(showable, MIME("text/markdown"), r)
+        if !(flavor isa CarpentriesFlavor) && Base.invokelatest(showable, MIME("text/markdown"), r)
             write(io, '\n')
             Base.invokelatest(show, io, MIME("text/markdown"), r)
             write(io, '\n')
